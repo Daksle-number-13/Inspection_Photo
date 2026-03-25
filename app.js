@@ -308,8 +308,12 @@ async function handleUpload() {
     addToHist(LS_HIST_PROCESS, process);
     addToHist(LS_HIST_DEFECT,  defect);
     renderAllHist();
-    $('done-filename').textContent = `${total}장 → ${folderName}/`;
-    showScreen('screen-done');
+    $('done-filename').innerHTML = `
+      <strong>${total}장</strong> 완료<br>
+      📁 <code>${folderName}/</code>
+    `;
+    showStatus('✓ 업로드 완료!', 'success');
+    setTimeout(() => showScreen('screen-done'), 500);
   } else if (succeeded > 0) {
     showStatus(`⚠️ ${succeeded}/${total}장 완료, 실패: ${errors[0]}`, 'error');
   } else {
@@ -319,7 +323,18 @@ async function handleUpload() {
 
 function showStatus(msg, type = '') {
   const el = $('upload-status');
-  el.textContent = msg;
+
+  // 로더 아이콘 추가
+  let content = msg;
+  if (type === 'loading') {
+    content = '<span class="loader"></span> ' + msg;
+  } else if (type === 'success') {
+    content = '✓ ' + msg;
+  } else if (type === 'error') {
+    content = '✕ ' + msg;
+  }
+
+  el.innerHTML = content;
   el.className = 'upload-status ' + type;
   el.style.display = 'block';
 }
@@ -383,6 +398,21 @@ function init() {
     $('file-gallery').value = '';
     showScreen('screen-main');
   });
+
+  // ── 도움말 ──
+  if ($('btn-help')) {
+    $('btn-help').addEventListener('click', () => {
+      alert(
+        '📸 검사 사진 등록 가이드\n\n' +
+        '1️⃣ 일시: 촬영 날짜 선택\n' +
+        '2️⃣ 위치: 업로드할 폴더 선택\n' +
+        '3️⃣ 정보: 제품명, 공정, 불량 입력\n' +
+        '4️⃣ 사진: 촬영 또는 갤러리 선택\n' +
+        '5️⃣ 업로드: ☁️ 버튼 클릭\n\n' +
+        '💡 팁: 갤러리에서는 여러 장을 한 번에 선택할 수 있습니다.'
+      );
+    });
+  }
 
   // ── 설정 열기 ──
   $('btn-settings').addEventListener('click', () => {
