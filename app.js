@@ -47,6 +47,54 @@ function showScreen(id) {
 function getFolders() { return loadJSON(LS_FOLDERS); }
 function saveFolders(list) { saveJSON(LS_FOLDERS, list); }
 
+// ── 설정 내보내기 ──
+function exportSettings() {
+  const settings = {
+    folders: getFolders(),
+    histProduct: loadJSON(LS_HIST_PRODUCT),
+    histProcess: loadJSON(LS_HIST_PROCESS),
+    histDefect: loadJSON(LS_HIST_DEFECT),
+    exportDate: new Date().toISOString()
+  };
+
+  const json = JSON.stringify(settings, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `inspection-photo-settings_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showStatus('✓ 설정이 다운로드되었습니다', 'success');
+}
+
+// ── 설정 가져오기 ──
+function importSettings(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const settings = JSON.parse(e.target.result);
+
+      saveFolders(settings.folders || []);
+      saveJSON(LS_HIST_PRODUCT, settings.histProduct || []);
+      saveJSON(LS_HIST_PROCESS, settings.histProcess || []);
+      saveJSON(LS_HIST_DEFECT, settings.histDefect || []);
+
+      renderFolderList();
+      renderFolderDropdown();
+      renderAllHist();
+
+      showStatus('✓ 설정이 복원되었습니다', 'success');
+    } catch (err) {
+      showStatus('✕ 설정 파일 읽기 실패: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
 function renderFolderList() {
   const list = getFolders();
   const ul = $('folder-list');
@@ -535,6 +583,27 @@ function init() {
     renderFolderList();
     renderFolderDropdown();
   });
+
+  // ── 설정 내보내기 ──
+  if ($('btn-export-settings')) {
+    $('btn-export-settings').addEventListener('click', exportSettings);
+  }
+
+  // ── 설정 불러오기 ──
+  if ($('btn-import-settings')) {
+    $('btn-import-settings').addEventListener('click', () => {
+      $('file-import-settings').click();
+    });
+  }
+
+  if ($('file-import-settings')) {
+    $('file-import-settings').addEventListener('change', e => {
+      if (e.target.files.length) {
+        importSettings(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+  }
 
   // ── Service Worker 등록 ──
   if ('serviceWorker' in navigator) {
