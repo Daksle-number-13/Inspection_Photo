@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════
 // 외부 모듈 임포트
 // ═══════════════════════════════════════
-import CloudikeUploader from './cloudike-uploader.js';
+import CloudikeUploader from './modules/cloudike-uploader.js';
 
 // ═══════════════════════════════════════
 // 상수 & localStorage 키
