@@ -201,9 +201,21 @@ async function uploadToCloudike(file, shareUrl, folderName, fileName) {
   }
 
   // ── 2단계: 서명된 URL로 파일 PUT 전송 ──
-  const putRes = await fetch(uploadUrl, {
+  // 서명된 URL 파라미터에서 content-type 읽기 (불일치 시 403)
+  let contentType = file.type || 'image/jpeg';
+  try {
+    const signedType = new URL(uploadUrl).searchParams.get('content-type') ||
+                       new URL(uploadUrl).searchParams.get('Content-Type');
+    if (signedType) contentType = decodeURIComponent(signedType);
+  } catch (_) {}
+
+  // CORS 우회: KT Cloud 오브젝트 스토리지는 브라우저 직접 요청을 차단함
+  // corsproxy.io 를 통해 PUT 전달 (개인/사내 용도의 임시 우회책)
+  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(uploadUrl);
+
+  const putRes = await fetch(proxyUrl, {
     method: 'PUT',
-    headers: { 'Content-Type': file.type || 'image/jpeg' },
+    headers: { 'Content-Type': contentType },
     body: file
   });
 
