@@ -1,5 +1,13 @@
-// ── REV: APP_REV와 반드시 동일하게 유지 ──
-const REV = 'r1.1';
+const CACHE_NAME = 'inspection-photo-v3';
+const STATIC_ASSETS = [
+  './',
+  './index.html',
+  './style.css',
+  './app.js',
+  './manifest.json',
+  './icon-192.png',
+  './icon-512.png',
+];
 
 // 설치: 즉시 활성화 (대기 상태 건너뜀)
 self.addEventListener('install', () => self.skipWaiting());
