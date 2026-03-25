@@ -620,7 +620,7 @@ function init() {
 
   // ── Service Worker 등록 ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register(`sw.js?v=${APP_REV}`).catch(() => {});
   }
 }
 

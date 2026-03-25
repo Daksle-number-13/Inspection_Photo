@@ -1,4 +1,5 @@
-const CACHE_NAME = 'inspection-photo-v3';
+const REV = new URL(location.href).searchParams.get('v') || 'r1';
+const CACHE_NAME = `inspection-photo-${REV}`;
 const STATIC_ASSETS = [
   './',
   './index.html',
