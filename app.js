@@ -152,10 +152,77 @@ function addToHist(key, value) {
 // ═══════════════════════════════════════
 let selectedFiles = [];
 let isCameraMode = false;
+let mediaStream = null;
 
 function addFiles(fileList) {
   Array.from(fileList).forEach(f => selectedFiles.push(f));
   renderPreviews();
+}
+
+// ── WebRTC 카메라 시작 ──
+async function startCamera() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    const video = $('preview-video');
+    video.srcObject = mediaStream;
+    video.play();
+    isCameraMode = true;
+    updatePhotoMode();
+    showStatus('카메라가 준비되었습니다', 'success');
+  } catch (err) {
+    showStatus('카메라 접근 실패: ' + err.message, 'error');
+    console.error('Camera error:', err);
+  }
+}
+
+// ── 카메라 종료 ──
+function stopCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+}
+
+// ── 사진 촬영 (Canvas에서) ──
+function capturePhoto() {
+  const video = $('preview-video');
+  if (!video.videoWidth || !video.videoHeight) {
+    showStatus('카메라 준비 중입니다. 잠시 기다려주세요.', 'error');
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(blob => {
+    const fileName = `photo_${Date.now()}.jpg`;
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+    selectedFiles.push(file);
+    renderPreviews();
+
+    // 갤러리에 다운로드로 저장
+    downloadPhoto(blob, fileName);
+
+    showStatus(`${selectedFiles.length}장 촬영됨`, 'success');
+  }, 'image/jpeg', 0.9);
+}
+
+// ── 갤러리에 저장 (다운로드) ──
+function downloadPhoto(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function updatePhotoMode() {
@@ -385,42 +452,23 @@ function init() {
     });
   });
 
-  // ── 촬영 시작 버튼 (연속 촬영 모드 진입) ──
-  $('btn-camera').addEventListener('click', () => {
-    isCameraMode = true;
-    updatePhotoMode();
-    $('file-camera').click(); // 첫 촬영 시작
-  });
+  // ── 촬영 시작 버튼 (WebRTC 카메라 시작) ──
+  $('btn-camera').addEventListener('click', startCamera);
 
-  // ── 촬영 중 "다음 촬영" 버튼 ──
-  if ($('btn-camera-continue')) {
-    $('btn-camera-continue').addEventListener('click', () => {
-      $('file-camera').click();
-    });
+  // ── 촬영 버튼 ──
+  if ($('btn-capture')) {
+    $('btn-capture').addEventListener('click', capturePhoto);
   }
 
   // ── 촬영 완료 버튼 ──
   if ($('btn-camera-done')) {
     $('btn-camera-done').addEventListener('click', () => {
+      stopCamera();
       isCameraMode = false;
       updatePhotoMode();
+      $('upload-status').style.display = 'none';
     });
   }
-
-  $('file-camera').addEventListener('change', e => {
-    if (e.target.files.length) {
-      addFiles(e.target.files);
-
-      // 촬영 모드이면 갤러리 선택 창 자동 열기
-      if (isCameraMode) {
-        setTimeout(() => {
-          console.log('Auto-opening gallery for next photo...');
-          $('file-gallery').click();
-        }, 800);
-      }
-    }
-    e.target.value = ''; // 동일 파일 재선택 허용
-  });
 
   // ── 갤러리 버튼 (여러 장 동시 선택) ──
   $('btn-gallery').addEventListener('click', () => {
@@ -443,8 +491,7 @@ function init() {
     updatePhotoMode();
     renderPreviews();
     $('upload-status').style.display = 'none';
-    $('file-camera').value = '';
-    $('file-gallery').value = '';
+    stopCamera();
     showScreen('screen-main');
   });
 

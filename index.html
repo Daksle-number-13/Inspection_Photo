@@ -156,18 +156,22 @@
           갤러리<br><span style="font-size: 11px;">(다중선택)</span>
         </button>
       </div>
-      <div id="photo-mode-camera" class="photo-buttons" style="display:none; gap: 10px;">
-        <button id="btn-camera-continue" class="photo-btn" title="다음 사진을 촬영합니다" style="flex: 1;">
-          <span style="font-size: 24px; display: block; margin-bottom: 4px;">📷</span>
-          다음 촬영
-        </button>
-        <button id="btn-camera-done" class="photo-btn" title="촬영을 종료합니다" style="flex: 1; background-color: #2C9C7F;">
-          <span style="font-size: 24px; display: block; margin-bottom: 4px;">✓</span>
-          촬영 완료
-        </button>
+      <div id="photo-mode-camera" style="display:none;">
+        <div id="camera-preview-container" style="position: relative; width: 100%; margin-bottom: 16px; background: #000; border-radius: 8px; overflow: hidden;">
+          <video id="preview-video" style="width: 100%; height: auto; display: block;"></video>
+        </div>
+        <div class="photo-buttons" style="gap: 10px;">
+          <button id="btn-capture" class="photo-btn" title="사진을 촬영합니다" style="flex: 1; background-color: #2C9C7F;">
+            <span style="font-size: 24px; display: block; margin-bottom: 4px;">📸</span>
+            촬영
+          </button>
+          <button id="btn-camera-done" class="photo-btn" title="촬영을 종료합니다" style="flex: 1;">
+            <span style="font-size: 24px; display: block; margin-bottom: 4px;">✓</span>
+            완료
+          </button>
+        </div>
       </div>
-      <!-- 숨겨진 파일 인풋 -->
-      <input type="file" id="file-camera" accept="image/*" capture="environment" style="display:none" />
+      <!-- 갤러리 파일 인풋 -->
       <input type="file" id="file-gallery" accept="image/*" multiple style="display:none" />
 
       <!-- 미리보기 -->
