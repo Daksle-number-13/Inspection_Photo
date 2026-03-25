@@ -1,6 +1,11 @@
 'use strict';
 
 // ═══════════════════════════════════════
+// 외부 모듈 임포트
+// ═══════════════════════════════════════
+import CloudikeUploader from './cloudike-uploader.js';
+
+// ═══════════════════════════════════════
 // 상수 & localStorage 키
 // ═══════════════════════════════════════
 const LS_FOLDERS  = 'ip_folders';   // [{tag, url}, ...]
@@ -196,71 +201,8 @@ function renderPreviews() {
   });
 }
 
-// ═══════════════════════════════════════
-// Cloudike 업로드
-// ═══════════════════════════════════════
-async function uploadToCloudike(file, shareUrl, folderName, fileName) {
-  // 공유 URL에서 hash 추출
-  // 예: https://app.cloudike.kr/public/QcO1RAb6o → hash = QcO1RAb6o
-  const url = new URL(shareUrl.trim());
-  const hash = url.pathname.split('/').filter(Boolean).pop();
-  const filePath = '/' + folderName + '/' + fileName;
-
-  // ── 1단계: 업로드 URL 발급 (GraphQL CreatePublicFile) ──
-  const APOLLO = 'https://apollo.cloudike.kr/graphql';
-  const createRes = await fetch(APOLLO + '?o=CreatePublicFile', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      operationName: 'CreatePublicFile',
-      variables: {
-        input: { hash, path: filePath, size: file.size, overwrite: true, multipart: false }
-      },
-      query: `mutation CreatePublicFile($input: CreateFileInput!) {
-        createPublicFile(input: $input) { url confirmUrl }
-      }`
-    })
-  });
-
-  const createData = await createRes.json();
-  const uploadUrl  = createData?.data?.createPublicFile?.url;
-  const confirmUrl = createData?.data?.createPublicFile?.confirmUrl;
-
-  if (!uploadUrl) {
-    const msg = createData?.errors?.[0]?.message || JSON.stringify(createData).slice(0, 120);
-    throw new Error(`업로드 URL 생성 실패: ${msg}`);
-  }
-
-  // ── 2단계: 서명된 URL로 파일 PUT 전송 ──
-  // 서명된 URL 파라미터에서 content-type 읽기 (불일치 시 403)
-  let contentType = file.type || 'image/jpeg';
-  try {
-    const signedType = new URL(uploadUrl).searchParams.get('content-type') ||
-                       new URL(uploadUrl).searchParams.get('Content-Type');
-    if (signedType) contentType = decodeURIComponent(signedType);
-  } catch (_) {}
-
-  // CORS 우회: KT Cloud 오브젝트 스토리지는 브라우저 직접 요청을 차단함
-  // corsproxy.io 를 통해 PUT 전달 (개인/사내 용도의 임시 우회책)
-  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(uploadUrl);
-
-  const putRes = await fetch(proxyUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file
-  });
-
-  if (!putRes.ok) {
-    throw new Error(`파일 전송 실패: HTTP ${putRes.status}`);
-  }
-
-  // ── 3단계: 업로드 확정 ──
-  if (confirmUrl) {
-    await fetch(confirmUrl, { method: 'GET' }).catch(() => {});
-  }
-
-  return filePath;
-}
+// Cloudike 업로드는 cloudike-uploader.js 모듈에서 관리
+const uploader = new CloudikeUploader();
 
 // ═══════════════════════════════════════
 // 업로드 실행
@@ -285,23 +227,15 @@ async function handleUpload() {
   const btn = $('btn-upload');
   btn.disabled = true;
 
-  const total = selectedFiles.length;
-  const errors = [];
-
-  for (let i = 0; i < total; i++) {
-    showStatus(`⏳ 업로드 중... (${i + 1}/${total})`, 'loading');
-    const file = selectedFiles[i];
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const fileName = `${Date.now()}_${String(i + 1).padStart(3, '0')}.${ext}`;
-    try {
-      await uploadToCloudike(file, folder.url, folderName, fileName);
-    } catch (err) {
-      errors.push(`${i + 1}번: ${err.message}`);
-    }
-  }
+  // CloudikeUploader 모듈 사용
+  const result = await uploader.uploadMultiple(selectedFiles, folder.url, folderName, (current, total) => {
+    showStatus(`⏳ 업로드 중... (${current}/${total})`, 'loading');
+  });
 
   btn.disabled = false;
-  const succeeded = total - errors.length;
+  const total = result.total;
+  const succeeded = result.succeeded;
+  const errors = result.errors.map(e => `${e.index + 1}번: ${e.error.message}`);
 
   if (errors.length === 0) {
     addToHist(LS_HIST_PRODUCT, product);
