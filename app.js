@@ -157,11 +157,18 @@ function addFiles(fileList) {
   Array.from(fileList).forEach(f => selectedFiles.push(f));
   renderPreviews();
 
+  console.log('addFiles called, isCameraMode:', isCameraMode);
+
   // 촬영 모드면 자동으로 "다음 촬영" 버튼 클릭
   if (isCameraMode) {
+    console.log('Camera mode ON, scheduling next shot...');
     setTimeout(() => {
       const btn = $('btn-camera-continue');
-      if (btn) btn.click();
+      console.log('Clicking continue button:', btn);
+      if (btn) {
+        btn.click();
+        console.log('Clicked!');
+      }
     }, 500);
   }
 }
