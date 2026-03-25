@@ -169,18 +169,26 @@ function handleFileSelect(file) {
 // Cloudike 업로드
 // ═══════════════════════════════════════
 async function uploadToCloudike(file, shareUrl, folderName, fileName) {
-  // Cloudike 공유링크 업로드: PUT /{shareUrl}/{folderName}/{fileName}
-  // 실제 Cloudike API 경로는 인스턴스 설정에 따라 다를 수 있습니다
-  const uploadUrl = `${shareUrl.replace(/\/$/, '')}/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`;
+  // 공유 URL에서 hash 추출
+  // 예: https://app.cloudike.kr/public/QcO1RAb6o → hash = QcO1RAb6o
+  const url = new URL(shareUrl.trim());
+  const hash = url.pathname.split('/').filter(Boolean).pop();
+  const filePath = `/${folderName}/${fileName}`;
+
+  // Cloudike REST API: POST /api/2/public/{hash}/files/
+  const uploadUrl = `${url.origin}/api/2/public/${hash}/files/?path=${encodeURIComponent(filePath)}`;
+
+  const formData = new FormData();
+  formData.append('file', file, fileName);
 
   const resp = await fetch(uploadUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type || 'image/jpeg' },
-    body: file,
+    method: 'POST',
+    body: formData,
   });
 
   if (!resp.ok) {
-    throw new Error(`업로드 실패: HTTP ${resp.status} ${resp.statusText}`);
+    const text = await resp.text().catch(() => '');
+    throw new Error(`업로드 실패: HTTP ${resp.status}${text ? ` — ${text.slice(0, 120)}` : ''}`);
   }
   return uploadUrl;
 }
