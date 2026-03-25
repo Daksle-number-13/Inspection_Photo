@@ -620,10 +620,12 @@ function init() {
 
   // ── Service Worker 등록 ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register(`sw.js?v=${APP_REV}`).catch(() => {});
-    // 새 SW 활성화 시 자동 reload (캐시 교체 즉시 반영)
+    navigator.serviceWorker.register(`sw.js?v=${APP_REV}`, { updateViaCache: 'none' })
+      .catch(() => {});
+    // 새 SW 활성화 시 자동 reload (버전 즉시 반영)
+    let reloading = false;
     navigator.serviceWorker.addEventListener('controllerchange', () => {
-      window.location.reload();
+      if (!reloading) { reloading = true; window.location.reload(); }
     });
   }
 }
