@@ -368,23 +368,31 @@ async function uploadToCloudike(file, shareUrl, folderName, fileName) {
     if (signedType) contentType = decodeURIComponent(signedType);
   } catch (_) {}
 
-  // CORS 우회: KT Cloud 오브젝트 스토리지는 브라우저 직접 요청을 차단함
-  // corsproxy.io 를 통해 PUT 전달 (개인/사내 용도의 임시 우회책)
-  const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(uploadUrl);
-
-  const putRes = await fetch(proxyUrl, {
-    method: 'PUT',
-    headers: { 'Content-Type': contentType },
-    body: file
-  });
+  // 직접 PUT 시도 → CORS 차단 시 프록시로 fallback
+  let putRes;
+  try {
+    putRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: file
+    });
+  } catch (_) {
+    // CORS 차단: corsproxy.io 경유
+    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(uploadUrl);
+    putRes = await fetch(proxyUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: file
+    });
+  }
 
   if (!putRes.ok) {
     throw new Error(`파일 전송 실패: HTTP ${putRes.status}`);
   }
 
-  // ── 3단계: 업로드 확정 ──
+  // ── 3단계: 업로드 확정 (기다리지 않음) ──
   if (confirmUrl) {
-    await fetch(confirmUrl, { method: 'GET' }).catch(() => {});
+    fetch(confirmUrl, { method: 'GET' }).catch(() => {});
   }
 
   return filePath;
