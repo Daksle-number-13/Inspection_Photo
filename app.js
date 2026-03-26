@@ -1,9 +1,6 @@
 'use strict';
 
-// ═══════════════════════════════════════
-// 외부 모듈 임포트
-// ═══════════════════════════════════════
-import CloudikeUploader from './modules/cloudike-uploader.js';
+const APP_REV = 'r1.2'; // ← 빌드 배포 시 r2, r3... 순으로 올릴 것
 
 // ═══════════════════════════════════════
 // 상수 & localStorage 키
@@ -51,6 +48,54 @@ function showScreen(id) {
 // ═══════════════════════════════════════
 function getFolders() { return loadJSON(LS_FOLDERS); }
 function saveFolders(list) { saveJSON(LS_FOLDERS, list); }
+
+// ── 설정 내보내기 ──
+function exportSettings() {
+  const settings = {
+    folders: getFolders(),
+    histProduct: loadJSON(LS_HIST_PRODUCT),
+    histProcess: loadJSON(LS_HIST_PROCESS),
+    histDefect: loadJSON(LS_HIST_DEFECT),
+    exportDate: new Date().toISOString()
+  };
+
+  const json = JSON.stringify(settings, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `inspection-photo-settings_${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+
+  showStatus('✓ 설정이 다운로드되었습니다', 'success');
+}
+
+// ── 설정 가져오기 ──
+function importSettings(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const settings = JSON.parse(e.target.result);
+
+      saveFolders(settings.folders || []);
+      saveJSON(LS_HIST_PRODUCT, settings.histProduct || []);
+      saveJSON(LS_HIST_PROCESS, settings.histProcess || []);
+      saveJSON(LS_HIST_DEFECT, settings.histDefect || []);
+
+      renderFolderList();
+      renderFolderDropdown();
+      renderAllHist();
+
+      showStatus('✓ 설정이 복원되었습니다', 'success');
+    } catch (err) {
+      showStatus('✕ 설정 파일 읽기 실패: ' + err.message, 'error');
+    }
+  };
+  reader.readAsText(file);
+}
 
 function renderFolderList() {
   const list = getFolders();
@@ -156,16 +201,96 @@ function addToHist(key, value) {
 // 사진 선택 & 미리보기 (다중)
 // ═══════════════════════════════════════
 let selectedFiles = [];
+let isCameraMode = false;
+let mediaStream = null;
 
 function addFiles(fileList) {
   Array.from(fileList).forEach(f => selectedFiles.push(f));
   renderPreviews();
 }
 
+// ── WebRTC 카메라 시작 ──
+async function startCamera() {
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
+      audio: false
+    });
+    const video = $('preview-video');
+    video.srcObject = mediaStream;
+    video.play();
+    isCameraMode = true;
+    updatePhotoMode();
+    showStatus('카메라가 준비되었습니다', 'success');
+  } catch (err) {
+    showStatus('카메라 접근 실패: ' + err.message, 'error');
+    console.error('Camera error:', err);
+  }
+}
+
+// ── 카메라 종료 ──
+function stopCamera() {
+  if (mediaStream) {
+    mediaStream.getTracks().forEach(track => track.stop());
+    mediaStream = null;
+  }
+}
+
+// ── 사진 촬영 (Canvas에서) ──
+function capturePhoto() {
+  const video = $('preview-video');
+  if (!video.videoWidth || !video.videoHeight) {
+    showStatus('카메라 준비 중입니다. 잠시 기다려주세요.', 'error');
+    return;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+
+  canvas.toBlob(blob => {
+    const fileName = `photo_${Date.now()}.jpg`;
+    const file = new File([blob], fileName, { type: 'image/jpeg' });
+    selectedFiles.push(file);
+    renderPreviews();
+
+    // 갤러리에 다운로드로 저장
+    downloadPhoto(blob, fileName);
+
+    showStatus(`${selectedFiles.length}장 촬영됨`, 'success');
+  }, 'image/jpeg', 0.85);
+}
+
+// ── 갤러리에 저장 (다운로드) ──
+function downloadPhoto(blob, fileName) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function updatePhotoMode() {
+  const normalMode = $('photo-mode-normal');
+  const cameraMode = $('photo-mode-camera');
+  if (isCameraMode) {
+    normalMode.style.display = 'none';
+    cameraMode.style.display = 'flex';
+  } else {
+    normalMode.style.display = 'flex';
+    cameraMode.style.display = 'none';
+  }
+}
+
 function renderPreviews() {
   const area = $('preview-area');
   if (selectedFiles.length === 0) {
-    area.innerHTML = '<span class="preview-placeholder">사진을 선택하면 여기에 표시됩니다</span>';
+    area.innerHTML = '<span class="preview-placeholder">💡 사진을 촬영하거나 갤러리에서 선택하세요<br><span style="font-size: 12px; color: #999; margin-top: 8px; display: block;">JPG, PNG 지원 | 최대 10장</span></span>';
     return;
   }
   area.innerHTML = `
@@ -201,8 +326,79 @@ function renderPreviews() {
   });
 }
 
-// Cloudike 업로드는 cloudike-uploader.js 모듈에서 관리
-const uploader = new CloudikeUploader();
+// ═══════════════════════════════════════
+// Cloudike 업로드
+// ═══════════════════════════════════════
+async function uploadToCloudike(file, shareUrl, folderName, fileName) {
+  // 공유 URL에서 hash 추출
+  // 예: https://app.cloudike.kr/public/QcO1RAb6o → hash = QcO1RAb6o
+  const url = new URL(shareUrl.trim());
+  const hash = url.pathname.split('/').filter(Boolean).pop();
+  const filePath = '/' + folderName + '/' + fileName;
+
+  // ── 1단계: 업로드 URL 발급 (GraphQL CreatePublicFile) ──
+  const APOLLO = 'https://apollo.cloudike.kr/graphql';
+  const createRes = await fetch(APOLLO + '?o=CreatePublicFile', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      operationName: 'CreatePublicFile',
+      variables: {
+        input: { hash, path: filePath, size: file.size, overwrite: true, multipart: false }
+      },
+      query: `mutation CreatePublicFile($input: CreateFileInput!) {
+        createPublicFile(input: $input) { url confirmUrl }
+      }`
+    })
+  });
+
+  const createData = await createRes.json();
+  const uploadUrl  = createData?.data?.createPublicFile?.url;
+  const confirmUrl = createData?.data?.createPublicFile?.confirmUrl;
+
+  if (!uploadUrl) {
+    const msg = createData?.errors?.[0]?.message || JSON.stringify(createData).slice(0, 120);
+    throw new Error(`업로드 URL 생성 실패: ${msg}`);
+  }
+
+  // ── 2단계: 서명된 URL로 파일 PUT 전송 ──
+  // 서명된 URL 파라미터에서 content-type 읽기 (불일치 시 403)
+  let contentType = file.type || 'image/jpeg';
+  try {
+    const signedType = new URL(uploadUrl).searchParams.get('content-type') ||
+                       new URL(uploadUrl).searchParams.get('Content-Type');
+    if (signedType) contentType = decodeURIComponent(signedType);
+  } catch (_) {}
+
+  // 직접 PUT 시도 → CORS 차단 시 프록시로 fallback
+  let putRes;
+  try {
+    putRes = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: file
+    });
+  } catch (_) {
+    // CORS 차단: corsproxy.io 경유
+    const proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(uploadUrl);
+    putRes = await fetch(proxyUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': contentType },
+      body: file
+    });
+  }
+
+  if (!putRes.ok) {
+    throw new Error(`파일 전송 실패: HTTP ${putRes.status}`);
+  }
+
+  // ── 3단계: 업로드 확정 (기다리지 않음) ──
+  if (confirmUrl) {
+    fetch(confirmUrl, { method: 'GET' }).catch(() => {});
+  }
+
+  return filePath;
+}
 
 // ═══════════════════════════════════════
 // 업로드 실행
@@ -227,15 +423,26 @@ async function handleUpload() {
   const btn = $('btn-upload');
   btn.disabled = true;
 
-  // CloudikeUploader 모듈 사용
-  const result = await uploader.uploadMultiple(selectedFiles, folder.url, folderName, (current, total) => {
-    showStatus(`⏳ 업로드 중... (${current}/${total})`, 'loading');
+  const total = selectedFiles.length;
+  const errors = [];
+
+  showStatus(`⏳ 업로드 중... (0/${total})`, 'loading');
+
+  // 병렬 업로드 (최대 5개 동시)
+  const uploadPromises = selectedFiles.map((file, i) => {
+    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+    const fileName = `${Date.now()}_${String(i + 1).padStart(3, '0')}.${ext}`;
+
+    return uploadToCloudike(file, folder.url, folderName, fileName)
+      .catch(err => {
+        errors.push(`${i + 1}번: ${err.message}`);
+      });
   });
 
+  await Promise.all(uploadPromises);
+
   btn.disabled = false;
-  const total = result.total;
-  const succeeded = result.succeeded;
-  const errors = result.errors.map(e => `${e.index + 1}번: ${e.error.message}`);
+  const succeeded = total - errors.length;
 
   if (errors.length === 0) {
     addToHist(LS_HIST_PRODUCT, product);
@@ -306,15 +513,30 @@ function init() {
     });
   });
 
-  // ── 카메라 버튼 (촬영마다 목록에 추가) ──
-  $('btn-camera').addEventListener('click', () => $('file-camera').click());
-  $('file-camera').addEventListener('change', e => {
-    if (e.target.files.length) addFiles(e.target.files);
-    e.target.value = ''; // 동일 파일 재선택 허용
-  });
+  // ── 촬영 시작 버튼 (WebRTC 카메라 시작) ──
+  $('btn-camera').addEventListener('click', startCamera);
+
+  // ── 촬영 버튼 ──
+  if ($('btn-capture')) {
+    $('btn-capture').addEventListener('click', capturePhoto);
+  }
+
+  // ── 촬영 완료 버튼 ──
+  if ($('btn-camera-done')) {
+    $('btn-camera-done').addEventListener('click', () => {
+      stopCamera();
+      isCameraMode = false;
+      updatePhotoMode();
+      $('upload-status').style.display = 'none';
+    });
+  }
 
   // ── 갤러리 버튼 (여러 장 동시 선택) ──
-  $('btn-gallery').addEventListener('click', () => $('file-gallery').click());
+  $('btn-gallery').addEventListener('click', () => {
+    isCameraMode = false; // 갤러리 선택 시 촬영 모드 종료
+    updatePhotoMode();
+    $('file-gallery').click();
+  });
   $('file-gallery').addEventListener('change', e => {
     if (e.target.files.length) addFiles(e.target.files);
     e.target.value = '';
@@ -326,10 +548,11 @@ function init() {
   // ── 완료 → 메인 복귀 ──
   $('btn-done-ok').addEventListener('click', () => {
     selectedFiles = [];
+    isCameraMode = false;
+    updatePhotoMode();
     renderPreviews();
     $('upload-status').style.display = 'none';
-    $('file-camera').value = '';
-    $('file-gallery').value = '';
+    stopCamera();
     showScreen('screen-main');
   });
 
@@ -374,9 +597,36 @@ function init() {
     renderFolderDropdown();
   });
 
+  // ── 설정 내보내기 ──
+  if ($('btn-export-settings')) {
+    $('btn-export-settings').addEventListener('click', exportSettings);
+  }
+
+  // ── 설정 불러오기 ──
+  if ($('btn-import-settings')) {
+    $('btn-import-settings').addEventListener('click', () => {
+      $('file-import-settings').click();
+    });
+  }
+
+  if ($('file-import-settings')) {
+    $('file-import-settings').addEventListener('change', e => {
+      if (e.target.files.length) {
+        importSettings(e.target.files[0]);
+        e.target.value = '';
+      }
+    });
+  }
+
   // ── Service Worker 등록 ──
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register(`sw.js?v=${APP_REV}`, { updateViaCache: 'none' })
+      .catch(() => {});
+    // 새 SW 활성화 시 자동 reload (버전 즉시 반영)
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!reloading) { reloading = true; window.location.reload(); }
+    });
   }
 }
 
