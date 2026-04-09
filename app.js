@@ -290,7 +290,7 @@ function updatePhotoMode() {
 function renderPreviews() {
   const area = $('preview-area');
   if (selectedFiles.length === 0) {
-    area.innerHTML = '<span class="preview-placeholder">💡 사진을 촬영하거나 갤러리에서 선택하세요<br><span style="font-size: 12px; color: #999; margin-top: 8px; display: block;">JPG, PNG 지원 | 최대 10장</span></span>';
+    area.innerHTML = '<span class="preview-placeholder">💡 사진을 촬영하거나 갤러리에서 선택하세요<br><span style="font-size: 12px; color: #999; margin-top: 8px; display: block;">JPG, PNG 지원 | 다중 선택 가능</span></span>';
     return;
   }
   area.innerHTML = `
